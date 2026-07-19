@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule Risk Bench — PERT Network Analysis</title>
+<style>
+  :root{
+    --ink:#0f2a3f;
+    --ink-2:#153a56;
+    --paper:#eef2f0;
+    --paper-2:#e2e8e4;
+    --line: rgba(238,242,240,0.16);
+    --line-strong: rgba(238,242,240,0.32);
+    --cyan:#5fd0c9;
+    --amber:#e8a33d;
+    --coral:#e5654a;
+    --teal:#3ec9b0;
+    --ok:#7cc47f;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --font-sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    min-height:100vh;
+    padding: 28px 20px 60px;
+  }
+  .sheet{
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .titleblock{
+    border: 1px solid var(--line-strong);
+    border-bottom: 2px solid var(--cyan);
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:flex-end;
+    padding: 16px 20px;
+    gap: 16px;
+  }
+  .titleblock h1{
+    font-size: 1.5rem;
+    margin:0 0 4px;
+    letter-spacing: 0.02em;
+    font-weight:700;
+  }
+  .titleblock p{
+    margin:0;
+    font-size:0.82rem;
+    color: rgba(238,242,240,0.68);
+    max-width: 560px;
+    line-height:1.5;
+  }
+  .tb-fields{
+    display:flex;
+    gap:22px;
+    font-family: var(--font-mono);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color: rgba(238,242,240,0.55);
+  }
+  .tb-fields div span{
+    display:block;
+    color: var(--cyan);
+    font-size:0.85rem;
+    letter-spacing:0.02em;
+    margin-top:2px;
+  }
+  .panel{
+    border: 1px solid var(--line-strong);
+    border-top:none;
+    padding: 20px;
+  }
+  .panel + .panel{ border-top: 1px dashed var(--line); }
+  .panel h2{
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.14em;
+    color: var(--cyan);
+    margin: 0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .panel h2::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background: var(--line-strong);
+  }
+  .grid2{
+    display:grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 860px){ .grid2{ grid-template-columns: 1fr; } }
+
+  table.acttable{ width:100%; border-collapse: collapse; font-family: var(--font-mono); font-size:0.85rem; }
+  table.acttable th{ text-align:left; font-weight:600; color: rgba(238,242,240,0.55); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; padding: 4px 6px; border-bottom:1px solid var(--line-strong); }
+  table.acttable td{ padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  table.acttable input{
+    width:100%; background: rgba(238,242,240,0.05); border:1px solid var(--line-strong);
+    color: var(--paper); font-family: var(--font-mono); font-size:0.85rem; padding:5px 6px; border-radius:2px;
+  }
+  table.acttable input:focus{ outline:none; border-color: var(--cyan); }
+  table.acttable input.name-input{ text-transform:uppercase; font-weight:600; }
+
+  .iconbtn{
+    background:transparent; border:1px solid var(--line-strong); color: var(--coral);
+    width:28px; height:28px; border-radius:2px; cursor:pointer; font-size:0.95rem; line-height:1;
+  }
+  .iconbtn:hover{ border-color: var(--coral); background: rgba(229,101,74,0.12); }
+
+  .btn{
+    font-family: var(--font-mono); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em;
+    background: transparent; border:1px solid var(--line-strong); color: var(--paper);
+    padding: 9px 14px; border-radius:2px; cursor:pointer; transition: 0.12s;
+  }
+  .btn:hover{ border-color: var(--cyan); color: var(--cyan); }
+  .btn.primary{ background: var(--cyan); border-color: var(--cyan); color: var(--ink); font-weight:700; }
+  .btn.primary:hover{ background: #7fe0d9; color: var(--ink); }
+  .btn.ghost{ color: rgba(238,242,240,0.6); }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  .row-actions{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+
+  table.acttable input.pred-input{ font-size:0.78rem; }
+  .hint{ font-size:0.75rem; color: rgba(238,242,240,0.5); margin-top:8px; line-height:1.5; }
+  .hint code{ background: rgba(238,242,240,0.08); padding:1px 5px; border-radius:2px; font-family: var(--font-mono); }
+
+  .netpreview{
+    background: rgba(238,242,240,0.04); border:1px solid var(--line-strong); border-radius:2px;
+    padding:12px 14px; font-family: var(--font-mono); font-size:0.8rem; line-height:1.7;
+    min-height: 148px; max-height: 320px; overflow-y:auto;
+  }
+  .netpreview .np-label{ color: rgba(238,242,240,0.5); text-transform:uppercase; font-size:0.65rem; letter-spacing:0.06em; margin: 10px 0 4px; }
+  .netpreview .np-label:first-child{ margin-top:0; }
+  .netpreview .np-path{ color: var(--cyan); }
+  .netpreview .np-path .arrow{ color: rgba(238,242,240,0.35); margin:0 4px; }
+  .netpreview .np-err{ color: var(--coral); }
+  .netpreview .np-empty{ color: rgba(238,242,240,0.4); }
+
+  .cfg-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:14px; }
+  @media (max-width:700px){ .cfg-grid{ grid-template-columns: 1fr 1fr; } }
+  .cfg-item label{ display:block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color: rgba(238,242,240,0.55); margin-bottom:6px; }
+  .cfg-item input{
+    width:100%; background: rgba(238,242,240,0.05); border:1px solid var(--line-strong);
+    color: var(--paper); font-family: var(--font-mono); font-size:0.85rem; padding:8px 10px; border-radius:2px;
+  }
+  .cfg-item input:focus{ outline:none; border-color: var(--cyan); }
+
+  .status{ font-family: var(--font-mono); font-size:0.8rem; color: var(--amber); margin-top:14px; min-height:1.2em; white-space:pre-wrap; }
+  .status.err{ color: var(--coral); }
+  .status.ok{ color: var(--ok); }
+
+  .results{ display:none; }
+  .results.show{ display:block; }
+
+  table.restable{ width:100%; border-collapse: collapse; font-family: var(--font-mono); font-size:0.85rem; margin-bottom:20px; }
+  table.restable th, table.restable td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; }
+  table.restable th:first-child, table.restable td:first-child{ text-align:left; }
+  table.restable thead th{ color: rgba(238,242,240,0.55); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--line-strong); }
+  table.restable td.exact-row{ color: var(--amber); }
+  table.restable td.mc-row{ color: var(--teal); }
+  table.restable tr.exact td:first-child::before{ content:"▸ "; color:var(--amber); }
+  table.restable tr.mc td:first-child::before{ content:"▸ "; color:var(--teal); }
+
+  .chartwrap{ background: rgba(238,242,240,0.03); border:1px solid var(--line); border-radius:2px; padding:14px 10px 6px; position:relative; }
+  #cdfChart{ display:block; width:100%; }
+  .chart-tooltip{
+    position:absolute; pointer-events:none; display:none;
+    background: var(--ink-2); border:1px solid var(--line-strong); border-radius:3px;
+    padding:6px 10px; font-family: var(--font-mono); font-size:0.72rem; color: var(--paper);
+    white-space:nowrap; z-index:5; box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  }
+  .chart-tooltip .tt-mc{ color: var(--teal); }
+  .chart-tooltip .tt-ex{ color: var(--amber); }
+  .legend-note{ display:flex; gap:22px; flex-wrap:wrap; font-size:0.72rem; color: rgba(238,242,240,0.6); margin: 10px 4px 0; font-family: var(--font-mono); }
+  .legend-note span{ display:inline-flex; align-items:center; gap:6px; }
+  .swatch{ width:14px; height:3px; display:inline-block; border-radius:2px; }
+
+  footer{ text-align:center; font-size:0.7rem; color: rgba(238,242,240,0.35); margin-top:18px; font-family: var(--font-mono); letter-spacing:0.04em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="titleblock">
+    <div>
+      <h1>Schedule Risk Bench</h1>
+      <p>Define any activity network as optimistic/most-likely/pessimistic durations plus the paths through it, then compare an exact numerical-convolution model against a Monte Carlo simulation on the same completion-time distribution.</p>
+    </div>
+    <div class="tb-fields">
+      <div>Model<span>Beta-PERT</span></div>
+      <div>Method<span>Convolution + MC</span></div>
+      <div>Rev<span id="revStamp">—</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>01 · Activities &amp; precedence</h2>
+    <div class="grid2">
+      <div>
+        <table class="acttable" id="actTable">
+          <thead>
+            <tr><th style="width:16%">Name</th><th>Opt. (o)</th><th>Likely (m)</th><th>Pess. (p)</th><th style="width:22%">Predecessors</th><th></th></tr>
+          </thead>
+          <tbody id="actBody"></tbody>
+        </table>
+        <div class="row-actions">
+          <button class="btn" id="addActBtn">+ Add activity</button>
+          <button class="btn ghost" id="loadExampleBtn">Load example network</button>
+        </div>
+        <div class="hint">Leave <strong>Predecessors</strong> blank for an activity that can start immediately. List the activities (comma-separated) that must finish first, e.g. an activity with predecessors <code>C,B</code> can't start until both C and B are done. The network — and every start-to-finish path through it — is derived automatically from these links.</div>
+      </div>
+      <div>
+        <h2 style="margin-top:0">02 · Derived network</h2>
+        <div class="netpreview" id="netPreview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>03 · Run configuration</h2>
+    <div class="cfg-grid">
+      <div class="cfg-item"><label>Convolution step (dx)</label><input type="number" id="cfgDx" value="0.02" step="0.01" min="0.001"></div>
+      <div class="cfg-item"><label>Monte Carlo trials</label><input type="number" id="cfgN" value="500000" step="50000" min="1000"></div>
+      <div class="cfg-item"><label>Random seed</label><input type="number" id="cfgSeed" value="42" step="1"></div>
+      <div class="cfg-item"><label>Duration targets (days, comma-sep.)</label><input type="text" id="cfgTargets" value="22,29,36"></div>
+    </div>
+    <div class="row-actions">
+      <button class="btn primary" id="runBtn">▸ Compute</button>
+    </div>
+    <div class="status" id="statusLine"></div>
+  </div>
+
+  <div class="panel results" id="resultsPanel">
+    <h2>04 · Results</h2>
+    <table class="restable" id="statTable"></table>
+    <div class="chartwrap">
+      <canvas id="cdfChart"></canvas>
+      <div class="chart-tooltip" id="chartTooltip"></div>
+    </div>
+    <div class="legend-note">
+      <span><span class="swatch" style="background:var(--teal)"></span>Monte Carlo CDF</span>
+      <span><span class="swatch" style="background:var(--amber);border-top:2px dashed var(--amber)"></span>Exact convolution CDF</span>
+      <span><span class="swatch" style="background:var(--coral)"></span>Duration targets</span>
+    </div>
+  </div>
+
+  <footer>ALL COMPUTATION RUNS LOCALLY IN YOUR BROWSER · NOTHING IS UPLOADED</footer>
+</div>
+
+<script>
+/* =====================================================================
+   PART A — Math primitives: log-gamma, regularized incomplete beta,
+   beta-PERT construction. Pure functions, unit-tested against known
+   symmetric-beta cases (mean/median identities) during development.
+   ===================================================================== */
+function logGamma(x){
+  const g=7;
+  const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5) return Math.log(Math.PI/Math.sin(Math.PI*x)) - logGamma(1-x);
+  x-=1;
+  let a=c[0];
+  const t=x+g+0.5;
+  for(let i=1;i<g+2;i++) a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+function logBeta(a,b){ return logGamma(a)+logGamma(b)-logGamma(a+b); }
+function betacf(x,a,b){
+  const MAXIT=200, EPS=3e-14, FPMIN=1e-300;
+  const qab=a+b, qap=a+1, qam=a-1;
+  let c=1, d=1-(qab*x)/qap;
+  if(Math.abs(d)<FPMIN) d=FPMIN;
+  d=1/d; let h=d;
+  for(let m=1;m<=MAXIT;m++){
+    const m2=2*m;
+    let aa=(m*(b-m)*x)/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<FPMIN) d=FPMIN;
+    c=1+aa/c; if(Math.abs(c)<FPMIN) c=FPMIN;
+    d=1/d; h*=d*c;
+    aa=(-(a+m)*(qab+m)*x)/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<FPMIN) d=FPMIN;
+    c=1+aa/c; if(Math.abs(c)<FPMIN) c=FPMIN;
+    d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<EPS) break;
+  }
+  return h;
+}
+function betaInc(x,a,b){
+  if(x<=0) return 0; if(x>=1) return 1;
+  const bt=Math.exp(logGamma(a+b)-logGamma(a)-logGamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  if(x<(a+1)/(a+b+2)) return (bt*betacf(x,a,b))/a;
+  return 1-(bt*betacf(1-x,b,a))/b;
+}
+function betaPdfStd(x,a,b){
+  if(x<0||x>1) return 0;
+  if(x===0) return a<1?Infinity:(a===1?b:0);
+  if(x===1) return b<1?Infinity:(b===1?a:0);
+  return Math.exp((a-1)*Math.log(x)+(b-1)*Math.log(1-x)-logBeta(a,b));
+}
+function pertRandVar(o,m,p){
+  if(p===o) return {kind:'const', value:m};
+  const alpha=1+4*(m-o)/(p-o);
+  const beta_=1+4*(p-m)/(p-o);
+  return {kind:'beta', a:alpha, b:beta_, loc:o, scale:p-o};
+}
+function rvPdf(rv,x){ if(rv.kind==='const') return 0; return betaPdfStd((x-rv.loc)/rv.scale, rv.a, rv.b)/rv.scale; }
+function rvCdf(rv,x){ if(rv.kind==='const') return x<rv.value?0:1; return betaInc((x-rv.loc)/rv.scale, rv.a, rv.b); }
+function rvRange(rv){ if(rv.kind==='const') return [rv.value, rv.value]; return [rv.loc, rv.loc+rv.scale]; }
+
+/* =====================================================================
+   PART B — Grid utilities & convolution engine
+   ===================================================================== */
+function linspaceRange(x0,x1,dx){
+  const n=Math.max(2, Math.round((x1-x0)/dx)+1);
+  const arr=new Float64Array(n);
+  for(let i=0;i<n;i++) arr[i]=x0+i*dx;
+  return arr;
+}
+function interpLinear(xq,xGrid,yGrid,left,right){
+  const n=xGrid.length;
+  if(xq<=xGrid[0]) return left!==undefined?left:yGrid[0];
+  if(xq>=xGrid[n-1]) return right!==undefined?right:yGrid[n-1];
+  let lo=0, hi=n-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(xGrid[mid]<=xq) lo=mid; else hi=mid; }
+  const t=(xq-xGrid[lo])/(xGrid[hi]-xGrid[lo]);
+  return yGrid[lo]+t*(yGrid[hi]-yGrid[lo]);
+}
+function cumulativeTrapezoid(y,dx){
+  const n=y.length; const out=new Float64Array(n); out[0]=0;
+  for(let i=1;i<n;i++) out[i]=out[i-1]+dx*(y[i]+y[i-1])/2;
+  return out;
+}
+function trapezoidSum(y,dx){ let s=0; for(let i=1;i<y.length;i++) s+=dx*(y[i]+y[i-1])/2; return s; }
+function convolveArrays(a,b){
+  const n=a.length,m=b.length;
+  const out=new Float64Array(n+m-1);
+  for(let i=0;i<n;i++){ const av=a[i]; if(av===0) continue; for(let j=0;j<m;j++) out[i+j]+=av*b[j]; }
+  return out;
+}
+// Sum of independent rv's (betas convolved, constants folded into an offset)
+function buildResidual(rvs,dx){
+  let offset=0; const betaRvs=[];
+  for(const rv of rvs){ if(rv.kind==='const') offset+=rv.value; else betaRvs.push(rv); }
+  if(betaRvs.length===0) return {delta:true, offset};
+  let x0=0, pdf=null;
+  for(const rv of betaRvs){
+    const [lo,hi]=rvRange(rv);
+    const grid=linspaceRange(lo,hi,dx);
+    const pvals=new Float64Array(grid.length);
+    for(let i=0;i<grid.length;i++) pvals[i]=rvPdf(rv,grid[i]);
+    if(pdf===null){ pdf=pvals; x0=lo; }
+    else { const conv=convolveArrays(pdf,pvals); for(let i=0;i<conv.length;i++) conv[i]*=dx; pdf=conv; x0=x0+lo; }
+  }
+  return {delta:false, offset, x0, dx, pdf};
+}
+function residualCdfAt(residual,x){
+  if(residual.delta) return x<residual.offset?0:1;
+  if(!residual._cdfCache){
+    const cdfVals=cumulativeTrapezoid(residual.pdf, residual.dx);
+    for(let i=0;i<cdfVals.length;i++) cdfVals[i]=Math.min(1,Math.max(0,cdfVals[i]));
+    const grid=linspaceRange(residual.x0, residual.x0+(residual.pdf.length-1)*residual.dx, residual.dx);
+    residual._cdfCache={grid,cdfVals};
+  }
+  const {grid,cdfVals}=residual._cdfCache;
+  return interpLinear(x-residual.offset, grid, cdfVals, 0, 1);
+}
+
+/* =====================================================================
+   PART C — Exact method, generalized to any number of paths / activities.
+   Any activity used on 2+ paths is treated as a shared random variable;
+   we integrate over its distribution (nested grid for multiple shared
+   vars) and multiply the conditional path CDFs, since — conditioned on
+   the shared values — the remaining per-path activities are disjoint
+   and therefore independent. This collapses to the same formula as a
+   hand-built PERT convolution when there is exactly one shared driver.
+   ===================================================================== */
+function computeExact(activities, paths, opts){
+  const dx = opts.dx || 0.02;
+  // Compute budget: target this many total (shared-grid-combo × x-grid) evaluations
+  // as an upper bound so the browser never hangs, regardless of network size.
+  const comboBudget = opts.comboBudget || 20000;   // total shared-variable grid combinations
+  const hardDimCap = opts.hardDimCap || 10;         // absolute ceiling on shared dimensions
+
+  const rv={};
+  for(const name in activities){ const [o,m,p]=activities[name]; rv[name]=pertRandVar(o,m,p); }
+
+  const countIn={};
+  for(const path of paths){ const seen=new Set(path); for(const name of seen) countIn[name]=(countIn[name]||0)+1; }
+  const shared = Object.keys(countIn).filter(name=>countIn[name]>=2 && rv[name].kind==='beta');
+
+  let warning=null, sharedUsed=shared;
+  if(shared.length>hardDimCap){
+    warning=`${shared.length} activities are shared across paths — that's more than this tool conditions on exactly (cap: ${hardDimCap}). Using ${hardDimCap} of them (${shared.slice(0,hardDimCap).join(', ')}) and treating the rest as independent. Monte Carlo carries the full dependency structure — trust it over the exact curve when this warning appears.`;
+    sharedUsed=shared.slice(0,hardDimCap);
+  }
+  const k = sharedUsed.length;
+  // Auto-pick grid points per shared dimension so the cartesian product of
+  // per-dimension grids stays near comboBudget: points ≈ comboBudget^(1/k).
+  const sharedGridPoints = k===0 ? 0 : Math.max(8, Math.min(500, Math.round(Math.pow(comboBudget, 1/k))));
+  if(k>=3 && sharedGridPoints<25){
+    warning = (warning?warning+' ':'') + `Auto-tuned to ${sharedGridPoints} grid points per shared variable (${k} dimensions) to keep runtime reasonable — the exact curve may show minor grid coarseness; Monte Carlo is unaffected.`;
+  }
+
+  const pathResiduals = paths.map(path=>{
+    const residualRvs = path.filter(name=>!sharedUsed.includes(name)).map(name=>rv[name]);
+    return buildResidual(residualRvs, dx);
+  });
+
+  let hi=-Infinity, trueLo=Infinity;
+  for(const path of paths){
+    let pLo=0, pHi=0;
+    for(const name of path){ const [a,b]=rvRange(rv[name]); pLo+=a; pHi+=b; }
+    hi=Math.max(hi,pHi); trueLo=Math.min(trueLo,pLo);
+  }
+  const xGrid = linspaceRange(Math.max(0,trueLo-1), hi+1, dx*2);
+
+  const F = new Float64Array(xGrid.length);
+
+  if(sharedUsed.length===0){
+    for(let i=0;i<xGrid.length;i++){
+      let prod=1;
+      for(const res of pathResiduals) prod*=residualCdfAt(res, xGrid[i]);
+      F[i]=Math.min(1,Math.max(0,prod));
+    }
+    return finalizeExact(xGrid,F,warning);
+  }
+
+  const sharedGrids = sharedUsed.map(name=>{
+    const r=rv[name]; const [a,b]=rvRange(r);
+    const g=linspaceRange(a,b,(b-a)/sharedGridPoints);
+    const pdfVals=new Float64Array(g.length);
+    for(let i=0;i<g.length;i++) pdfVals[i]=rvPdf(r,g[i]);
+    return {name, grid:g, pdfVals};
+  });
+  const pathSharedIdx = paths.map(path=> sharedUsed.map((name,idx)=>path.includes(name)?idx:-1).filter(i=>i>=0));
+  const dims = sharedGrids.map(sg=>sg.grid.length);
+  const totalCombos = dims.reduce((a,b)=>a*b,1);
+  const idxArr=new Array(sharedGrids.length).fill(0);
+  const comboVals=new Array(sharedGrids.length).fill(0);
+
+  let cellVol=1;
+  for(const sg of sharedGrids){ const g=sg.grid; cellVol*= (g.length>1? (g[g.length-1]-g[0])/(g.length-1) : 1); }
+
+  for(let combo=0; combo<totalCombos; combo++){
+    let rem=combo, weight=1;
+    for(let d=0; d<sharedGrids.length; d++){
+      const n=dims[d]; const ii=rem%n; rem=Math.floor(rem/n);
+      idxArr[d]=ii; comboVals[d]=sharedGrids[d].grid[ii]; weight*=sharedGrids[d].pdfVals[ii];
+    }
+    const density=weight*cellVol;
+    if(density<=0) continue;
+    for(let xi=0; xi<xGrid.length; xi++){
+      const x=xGrid[xi];
+      let prod=1;
+      for(let pIdx=0; pIdx<paths.length; pIdx++){
+        let sharedSum=0;
+        for(const d of pathSharedIdx[pIdx]) sharedSum+=comboVals[d];
+        prod*=residualCdfAt(pathResiduals[pIdx], x-sharedSum);
+        if(prod===0) break;
+      }
+      F[xi]+=prod*density;
+    }
+  }
+  for(let i=0;i<F.length;i++) F[i]=Math.min(1,Math.max(0,F[i]));
+  return finalizeExact(xGrid,F,warning);
+}
+function finalizeExact(xGrid,F,warning){
+  const n=xGrid.length, dxArr=xGrid[1]-xGrid[0];
+  const pdf=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    if(i===0) pdf[i]=(F[1]-F[0])/dxArr;
+    else if(i===n-1) pdf[i]=(F[n-1]-F[n-2])/dxArr;
+    else pdf[i]=(F[i+1]-F[i-1])/(2*dxArr);
+    if(pdf[i]<0) pdf[i]=0;
+  }
+  let mean=0; for(let i=0;i<n;i++) mean+= (i===0||i===n-1?0.5:1)*xGrid[i]*pdf[i]*dxArr;
+  let variance=0; for(let i=0;i<n;i++) variance+= (i===0||i===n-1?0.5:1)*(xGrid[i]-mean)**2*pdf[i]*dxArr;
+  return {xGrid, F, pdf, mean, std:Math.sqrt(Math.max(0,variance)), warning};
+}
+
+/* =====================================================================
+   PART D — Monte Carlo simulation (any network, all activities sampled
+   jointly and independently, so shared activities are naturally
+   correlated across the paths that use them).
+   ===================================================================== */
+function mulberry32(seed){
+  return function(){
+    seed|=0; seed=(seed+0x6D2B79F5)|0;
+    let t=Math.imul(seed^(seed>>>15), 1|seed);
+    t=(t+Math.imul(t^(t>>>7), 61|t))^t;
+    return ((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+function randNormal(rng){
+  let u=0,v=0;
+  while(u===0) u=rng();
+  while(v===0) v=rng();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function sampleGamma(shape,rng){
+  if(shape<1){ const u=rng(); return sampleGamma(1+shape,rng)*Math.pow(u,1/shape); }
+  const d=shape-1/3, c=1/Math.sqrt(9*d);
+  for(;;){
+    let x,v;
+    do{ x=randNormal(rng); v=1+c*x; }while(v<=0);
+    v=v*v*v;
+    const u=rng();
+    if(u<1-0.0331*x*x*x*x) return d*v;
+    if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v;
+  }
+}
+function sampleBeta01(a,b,rng){ const x=sampleGamma(a,rng), y=sampleGamma(b,rng); return x/(x+y); }
+function sampleRv(rv,rng){ if(rv.kind==='const') return rv.value; return rv.loc+rv.scale*sampleBeta01(rv.a,rv.b,rng); }
+
+function runMonteCarlo(activities, paths, N, seed){
+  const rng=mulberry32(seed||42);
+  const names=Object.keys(activities);
+  const rv={}; for(const name of names) rv[name]=pertRandVar(...activities[name]);
+  const project=new Float64Array(N);
+  const durBuf={};
+  for(let i=0;i<N;i++){
+    for(const name of names) durBuf[name]=sampleRv(rv[name],rng);
+    let maxSum=-Infinity;
+    for(const path of paths){ let s=0; for(const name of path) s+=durBuf[name]; if(s>maxSum) maxSum=s; }
+    project[i]=maxSum;
+  }
+  project.sort();
+  let mean=0; for(let i=0;i<N;i++) mean+=project[i]; mean/=N;
+  let variance=0; for(let i=0;i<N;i++) variance+=(project[i]-mean)**2; variance/=N;
+  function probLE(x){
+    let lo=0,hi=N;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(project[mid]<=x) lo=mid+1; else hi=mid; }
+    return (lo/N)*100;
+  }
+  function cdfOnGrid(xGrid){
+    const out=new Float64Array(xGrid.length);
+    for(let i=0;i<xGrid.length;i++) out[i]=probLE(xGrid[i])/100;
+    return out;
+  }
+  return {mean, std:Math.sqrt(variance), probLE, cdfOnGrid, sorted:project};
+}
+
+/* =====================================================================
+   PART E — UI wiring
+   ===================================================================== */
+const EXAMPLE_ACTIVITIES = [
+  // name, o, m, p, predecessors (comma-separated, blank = start activity)
+  ['A',2,4,12, ''],
+  ['B',10,12,26, ''],
+  ['C',8,9,10, 'A'],
+  ['D',10,15,20, 'A'],
+  ['E',7,7.5,11, 'A'],
+  ['F',9,9,9, 'C,B'],
+  ['G',3,3.5,7, 'D'],
+  ['H',5,5,5, 'F,G,E'],
+];
+
+const actBody = document.getElementById('actBody');
+const netPreview = document.getElementById('netPreview');
+
+function addActivityRow(name='', o='', m='', p='', pred=''){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="name-input" type="text" value="${name}" maxlength="12"></td>
+    <td><input type="number" step="any" value="${o}"></td>
+    <td><input type="number" step="any" value="${m}"></td>
+    <td><input type="number" step="any" value="${p}"></td>
+    <td><input class="pred-input" type="text" value="${pred}" placeholder="—"></td>
+    <td><button class="iconbtn" title="Remove activity">✕</button></td>
+  `;
+  tr.querySelector('.iconbtn').addEventListener('click', ()=>{ tr.remove(); updateNetworkPreview(); });
+  actBody.appendChild(tr);
+}
+
+function loadExample(){
+  actBody.innerHTML='';
+  for(const [name,o,m,p,pred] of EXAMPLE_ACTIVITIES) addActivityRow(name,o,m,p,pred);
+  document.getElementById('cfgTargets').value = "22,29,36";
+  updateNetworkPreview();
+}
+
+document.getElementById('addActBtn').addEventListener('click', ()=> { addActivityRow(); updateNetworkPreview(); });
+document.getElementById('loadExampleBtn').addEventListener('click', loadExample);
+actBody.addEventListener('input', ()=> updateNetworkPreview());
+
+function readActivities(){
+  const activities={};
+  const predecessors={};
+  const rows = actBody.querySelectorAll('tr');
+  for(const row of rows){
+    const inputs = row.querySelectorAll('input');
+    const name = inputs[0].value.trim().toUpperCase();
+    if(!name) continue;
+    const o = parseFloat(inputs[1].value), m = parseFloat(inputs[2].value), p = parseFloat(inputs[3].value);
+    if([o,m,p].some(v=>isNaN(v))) throw new Error(`Activity "${name}" has a missing or invalid o/m/p value.`);
+    if(!(o<=m && m<=p)) throw new Error(`Activity "${name}" must satisfy optimistic ≤ most-likely ≤ pessimistic.`);
+    if(activities[name]) throw new Error(`Activity name "${name}" is used more than once.`);
+    activities[name]=[o,m,p];
+    predecessors[name] = inputs[4].value.split(',').map(s=>s.trim().toUpperCase()).filter(s=>s.length>0);
+  }
+  if(Object.keys(activities).length===0) throw new Error('Add at least one activity.');
+  for(const name in predecessors){
+    for(const p of predecessors[name]){
+      if(!activities[p]) throw new Error(`Activity "${name}" lists unknown predecessor "${p}".`);
+      if(p===name) throw new Error(`Activity "${name}" cannot be its own predecessor.`);
+    }
+  }
+  return {activities, predecessors};
+}
+
+// Derives every simple start-to-finish path through the precedence graph.
+// "Start" activities have no predecessors; "finish" activities are those
+// nothing else lists as a predecessor. Project duration = max over paths.
+const MAX_DERIVED_PATHS = 3000;
+function derivePaths(activities, predecessors){
+  const names = Object.keys(activities);
+  const succ = {}; names.forEach(n=> succ[n]=[]);
+  for(const n of names){
+    for(const p of (predecessors[n]||[])) succ[p].push(n);
+  }
+  const sources = names.filter(n => (predecessors[n]||[]).length===0);
+  const sinks = names.filter(n => succ[n].length===0);
+  if(sources.length===0) throw new Error('No start activities found — every activity has a predecessor, which means the network has a cycle.');
+  if(sinks.length===0) throw new Error('No end activities found — every activity has a successor, which means the network has a cycle.');
+
+  const paths=[];
+  const onStack = new Set();
+  function dfs(node, acc){
+    if(onStack.has(node)) throw new Error(`Cycle detected: activity "${node}" depends on itself through the chain ${acc.concat(node).join(' → ')}.`);
+    onStack.add(node);
+    acc.push(node);
+    if(succ[node].length===0){
+      paths.push(acc.slice());
+      if(paths.length > MAX_DERIVED_PATHS) throw new Error(`This network has more than ${MAX_DERIVED_PATHS} distinct start-to-finish paths — too many to enumerate. Simplify the network.`);
+    } else {
+      for(const nxt of succ[node]) dfs(nxt, acc);
+    }
+    acc.pop();
+    onStack.delete(node);
+  }
+  for(const s of sources) dfs(s, []);
+
+  const used = new Set(paths.flat());
+  const unused = names.filter(n=>!used.has(n));
+  if(unused.length>0) throw new Error(`Not connected to any start-to-finish path: ${unused.join(', ')}. Check the predecessor links.`);
+
+  return {paths, sources, sinks};
+}
+
+function updateNetworkPreview(){
+  try{
+    const {activities, predecessors} = readActivities();
+    const {paths, sources, sinks} = derivePaths(activities, predecessors);
+    let html = `<div class="np-label">Start (${sources.length})</div>${sources.join(', ')}`;
+    html += `<div class="np-label">Finish (${sinks.length})</div>${sinks.join(', ')}`;
+    html += `<div class="np-label">Paths (${paths.length})</div>`;
+    html += paths.map(p=>`<div class="np-path">${p.join('<span class="arrow">→</span>')}</div>`).join('');
+    netPreview.innerHTML = html;
+  }catch(e){
+    netPreview.innerHTML = `<div class="np-err">${e.message}</div>`;
+  }
+}
+
+function setStatus(msg, kind){
+  const el = document.getElementById('statusLine');
+  el.textContent = msg || '';
+  el.className = 'status' + (kind?(' '+kind):'');
+}
+
+let lastChartData = null;
+
+async function runComputation(){
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  setStatus('Parsing network…');
+  await new Promise(r=>setTimeout(r,10));
+  let activities, paths;
+  try{
+    const {activities: acts, predecessors} = readActivities();
+    activities = acts;
+    paths = derivePaths(activities, predecessors).paths;
+  }catch(e){
+    setStatus('✕ '+e.message, 'err');
+    runBtn.disabled = false;
+    return;
+  }
+
+  const dx = Math.max(0.001, parseFloat(document.getElementById('cfgDx').value) || 0.02);
+  const N = Math.max(1000, Math.round(parseFloat(document.getElementById('cfgN').value) || 500000));
+  const seed = Math.round(parseFloat(document.getElementById('cfgSeed').value)) || 42;
+  const targets = document.getElementById('cfgTargets').value.split(',').map(s=>parseFloat(s.trim())).filter(v=>!isNaN(v));
+
+  try{
+    setStatus('Running exact numerical convolution…');
+    await new Promise(r=>setTimeout(r,10));
+    const t0 = performance.now();
+    const exact = computeExact(activities, paths, {dx});
+    const t1 = performance.now();
+
+    setStatus(`Exact model done in ${(t1-t0).toFixed(0)} ms. Running Monte Carlo (${N.toLocaleString()} trials)…`);
+    await new Promise(r=>setTimeout(r,10));
+    const t2 = performance.now();
+    const mc = runMonteCarlo(activities, paths, N, seed);
+    const t3 = performance.now();
+
+
+    renderResults(activities, paths, exact, mc, targets, {exactMs:t1-t0, mcMs:t3-t2});
+    setStatus(exact.warning ? ('⚠ '+exact.warning) : `✓ Done — exact model ${(t1-t0).toFixed(0)} ms, Monte Carlo ${(t3-t2).toFixed(0)} ms.`, exact.warning ? 'err' : 'ok');
+  }catch(e){
+    console.error(e);
+    setStatus('✕ '+e.message, 'err');
+  }
+  runBtn.disabled = false;
+}
+
+function renderResults(activities, paths, exact, mc, targets, timing){
+  document.getElementById('resultsPanel').classList.add('show');
+
+  // ---- stats table ----
+  const table = document.getElementById('statTable');
+  let head = '<thead><tr><th>Method</th><th>Mean</th><th>Std dev</th>';
+  for(const t of targets) head += `<th>P(≤ ${t})</th>`;
+  head += '</tr></thead>';
+  function probExactAt(x){ return interpLinear(x, exact.xGrid, exact.F, 0, 1)*100; }
+  let body = '<tbody>';
+  body += `<tr class="exact"><td class="exact-row">Exact convolution</td><td>${exact.mean.toFixed(3)}</td><td>${exact.std.toFixed(3)}</td>`;
+  for(const t of targets) body += `<td>${probExactAt(t).toFixed(2)}%</td>`;
+  body += '</tr>';
+  body += `<tr class="mc"><td class="mc-row">Monte Carlo</td><td>${mc.mean.toFixed(3)}</td><td>${mc.std.toFixed(3)}</td>`;
+  for(const t of targets) body += `<td>${mc.probLE(t).toFixed(2)}%</td>`;
+  body += '</tr></tbody>';
+  table.innerHTML = head+body;
+
+  // ---- chart data ----
+  const lo = mc.mean - 4.5*mc.std, hi = mc.mean + 4.5*mc.std;
+  const plotGrid = [];
+  const steps = 260;
+  for(let i=0;i<=steps;i++) plotGrid.push(lo + (hi-lo)*i/steps);
+  const mcCdf = mc.cdfOnGrid(plotGrid).map(v=>v*100);
+  const exCdf = plotGrid.map(x=>interpLinear(x, exact.xGrid, exact.F, 0, 1)*100);
+
+  lastChartData = {plotGrid, mcCdf, exCdf, targets};
+  drawChart(lastChartData);
+}
+
+/* =====================================================================
+   PART F — Self-contained canvas chart (no external chart library).
+   Draws the two CDF overlays plus target markers, with a lightweight
+   hover tooltip. Redraws on resize since canvas isn't auto-responsive.
+   ===================================================================== */
+function drawChart(data){
+  const canvas = document.getElementById('cdfChart');
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = Math.max(280, wrap.clientWidth - 4);
+  const cssHeight = 380;
+  canvas.width = Math.round(cssWidth*dpr);
+  canvas.height = Math.round(cssHeight*dpr);
+  canvas.style.width = cssWidth+'px';
+  canvas.style.height = cssHeight+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssWidth,cssHeight);
+
+  const margin = {top:16, right:20, bottom:40, left:54};
+  const w = cssWidth - margin.left - margin.right;
+  const h = cssHeight - margin.top - margin.bottom;
+  const {plotGrid, mcCdf, exCdf, targets} = data;
+  const xMin = plotGrid[0], xMax = plotGrid[plotGrid.length-1];
+  const xScale = x => margin.left + (x-xMin)/(xMax-xMin) * w;
+  const yScale = y => margin.top + h - (y/100) * h;
+
+  ctx.font = '11px ui-monospace, SFMono-Regular, Consolas, monospace';
+
+  // horizontal gridlines + labels
+  ctx.strokeStyle = 'rgba(238,242,240,0.10)';
+  ctx.fillStyle = 'rgba(238,242,240,0.65)';
+  ctx.lineWidth = 1;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for(let yv=0; yv<=100; yv+=25){
+    const py = yScale(yv);
+    ctx.beginPath(); ctx.moveTo(margin.left,py); ctx.lineTo(margin.left+w,py); ctx.stroke();
+    ctx.fillText(yv+'%', margin.left-8, py);
+  }
+
+  // vertical gridlines + labels
+  const xTicks = 6;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for(let i=0;i<=xTicks;i++){
+    const xv = xMin + (xMax-xMin)*i/xTicks;
+    const px = xScale(xv);
+    ctx.strokeStyle = 'rgba(238,242,240,0.10)';
+    ctx.beginPath(); ctx.moveTo(px,margin.top); ctx.lineTo(px,margin.top+h); ctx.stroke();
+    ctx.fillStyle = 'rgba(238,242,240,0.65)';
+    ctx.fillText(xv.toFixed(1), px, margin.top+h+8);
+  }
+
+  // axis titles
+  ctx.fillStyle = '#eef2f0';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Project duration (days)', margin.left + w/2, cssHeight-4);
+  ctx.save();
+  ctx.translate(14, margin.top + h/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center';
+  ctx.fillText('Cumulative probability (%)', 0, 0);
+  ctx.restore();
+
+  // 50% reference line
+  ctx.strokeStyle = 'rgba(238,242,240,0.25)';
+  ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(margin.left, yScale(50)); ctx.lineTo(margin.left+w, yScale(50)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // target markers
+  ctx.setLineDash([3,3]);
+  ctx.strokeStyle = 'rgba(229,101,74,0.85)';
+  ctx.lineWidth = 1.4;
+  ctx.fillStyle = '#e5654a';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  for(const t of targets){
+    if(t < xMin || t > xMax) continue;
+    const px = xScale(t);
+    ctx.beginPath(); ctx.moveTo(px,margin.top); ctx.lineTo(px,margin.top+h); ctx.stroke();
+    ctx.fillText(String(t), px+3, margin.top+2);
+  }
+  ctx.setLineDash([]);
+
+  // Monte Carlo curve (solid)
+  ctx.strokeStyle = '#3ec9b0';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  plotGrid.forEach((x,i)=>{
+    const px=xScale(x), py=yScale(mcCdf[i]);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  });
+  ctx.stroke();
+
+  // Exact curve (dashed)
+  ctx.setLineDash([6,4]);
+  ctx.strokeStyle = '#e8a33d';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  plotGrid.forEach((x,i)=>{
+    const px=xScale(x), py=yScale(exCdf[i]);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // plot border
+  ctx.strokeStyle = 'rgba(238,242,240,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(margin.left, margin.top, w, h);
+
+  canvas._meta = {margin, w, h, xMin, xMax, data};
+}
+
+function setupChartInteraction(){
+  const canvas = document.getElementById('cdfChart');
+  const tooltip = document.getElementById('chartTooltip');
+  canvas.addEventListener('mousemove', (ev)=>{
+    if(!canvas._meta){ return; }
+    const {margin, w, h, xMin, xMax, data} = canvas._meta;
+    const rect = canvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+    if(mx < margin.left || mx > margin.left+w || my < margin.top || my > margin.top+h){
+      tooltip.style.display = 'none';
+      return;
+    }
+    const frac = (mx - margin.left) / w;
+    const x = xMin + frac * (xMax - xMin);
+    const {plotGrid, mcCdf, exCdf} = data;
+    let idx = Math.round(frac * (plotGrid.length-1));
+    idx = Math.max(0, Math.min(plotGrid.length-1, idx));
+    tooltip.innerHTML = `<div>${plotGrid[idx].toFixed(2)} days</div>` +
+      `<div class="tt-mc">MC: ${mcCdf[idx].toFixed(2)}%</div>` +
+      `<div class="tt-ex">Exact: ${exCdf[idx].toFixed(2)}%</div>`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = Math.min(mx+14, canvas.clientWidth-140) + 'px';
+    tooltip.style.top = Math.max(my-46, 0) + 'px';
+  });
+  canvas.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+  window.addEventListener('resize', ()=>{
+    if(lastChartData) drawChart(lastChartData);
+  });
+}
+
+document.getElementById('runBtn').addEventListener('click', runComputation);
+
+// init
+loadExample();
+setupChartInteraction();
+document.getElementById('revStamp').textContent = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>

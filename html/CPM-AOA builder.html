@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AOA Network Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.4em; }
+  button { padding: 8px 18px; font-size: 14px; cursor: pointer; border: 1px solid #bbb; border-radius: 6px; background: #f7f7f7; }
+  button:hover { background: #eee; }
+  #graphWrap { position: relative; margin-top: 16px; }
+  #graph { border: 1px solid #ccc; padding: 20px; overflow: hidden; min-height: 100px; height: 480px; touch-action: none; cursor: grab; position: relative; }
+  #graph.grabbing { cursor: grabbing; }
+  #graph svg { width: 100%; height: auto; transform-origin: 0 0; display: block; }
+
+  .zoom-controls { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 6px; padding: 4px; z-index: 5; }
+  .zoom-controls button { width: 32px; height: 32px; padding: 0; font-size: 16px; line-height: 1; }
+  .zoom-controls .zoom-reset { font-size: 11px; }
+  .zoom-pct { text-align: center; font-size: 0.75em; color: #666; }
+  .hint { color: #666; font-size: 0.9em; }
+  .error { color: #b00020; font-weight: bold; white-space: pre-wrap; font-family: monospace; }
+
+  #activityTable { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  #activityTable th { text-align: left; font-size: 0.85em; color: #555; font-weight: 600; padding: 4px 8px; border-bottom: 1px solid #ddd; }
+  #activityTable td { padding: 4px 8px; vertical-align: top; }
+  #activityTable tr + tr td { border-top: 1px solid #eee; }
+
+  .name-input { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  .dur-input { width: 80px; box-sizing: border-box; padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+
+  .pred-dropdown { position: relative; width: 100%; }
+  .pred-trigger { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 6px; background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 6px 8px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pred-trigger-empty { color: #999; font-style: italic; }
+  .pred-panel { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 260px; max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.15); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .pred-search { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+  .pred-actions { display: flex; gap: 8px; }
+  .pred-actions button { flex: 1; font-size: 12px; padding: 4px 6px; }
+  .pred-options { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto; }
+  .pred-option { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+  .pred-option:hover { background: #f2f2f2; }
+  .pred-option input { margin: 0; }
+  .pred-empty { color: #999; font-size: 0.85em; font-style: italic; padding: 2px 4px; }
+  .pred-done { align-self: flex-end; font-size: 12px; padding: 4px 12px; }
+
+  .remove-btn { background: none; border: none; color: #b00020; font-size: 18px; cursor: pointer; padding: 0 6px; line-height: 1; }
+  .remove-btn:hover { background: #fbe9e9; border-radius: 4px; }
+
+  .toolbar { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  #addRowBtn { background: #fff; }
+
+  #cpmTableWrap { margin-top: 8px; overflow-x: auto; }
+  #cpmTable { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13px; }
+  #cpmTable th, #cpmTable td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
+  #cpmTable th { background: #f2f2f2; font-weight: 600; }
+  #cpmTable td:first-child, #cpmTable th:first-child { text-align: left; }
+  #cpmTable tr.cp-row td { background: #fde8e8; font-weight: 600; }
+  #cpmTable tr.cp-row td.remark-cell { color: #b00020; }
+</style>
+</head>
+<body>
+
+<h1>AOA Network Builder</h1>
+<p class="hint">Add each activity below with its duration and predecessors, then build the network. Duration is optional.</p>
+
+<table id="activityTable">
+  <thead>
+    <tr>
+      <th style="width:28%">Activity</th>
+      <th style="width:12%">Duration</th>
+      <th>Predecessors</th>
+      <th style="width:30px"></th>
+    </tr>
+  </thead>
+  <tbody id="rowsBody"></tbody>
+</table>
+
+<div class="toolbar">
+  <button id="addRowBtn" type="button">+ Add activity</button>
+  <button id="runBtn" type="button">Build Network</button>
+</div>
+
+<h2>AOA Network</h2>
+<div id="graphWrap">
+  <div id="graph"></div>
+  <div class="zoom-controls">
+    <button type="button" id="zoomInBtn" title="Zoom in">+</button>
+    <div class="zoom-pct" id="zoomPct">100%</div>
+    <button type="button" id="zoomOutBtn" title="Zoom out">&minus;</button>
+    <button type="button" id="zoomResetBtn" class="zoom-reset" title="Reset zoom">Reset</button>
+  </div>
+</div>
+
+<h2>CPM Table</h2>
+<div id="cpmTableWrap"></div>
+
+<script>
+// ---------- Data structures ----------
+
+class Activity {
+  constructor(name, duration, predecessors) {
+    this.name = name;
+    this.duration = duration;
+    this.predecessors = predecessors || [];
+  }
+}
+
+class Event {
+  constructor(id) {
+    this.id = id;
+    this.incoming = [];
+    this.outgoing = [];
+  }
+}
+
+class Arrow {
+  constructor(start, end, activity) {
+    this.start = start;
+    this.end = end;
+    this.activity = activity; // null => dummy
+  }
+}
+
+// ---------- Form row state ----------
+
+let rowSeq = 0;
+const rows = []; // { id, name, duration, predecessors: Set<rowId> }
+
+function addRow(initial) {
+  const row = {
+    id: rowSeq++,
+    name: (initial && initial.name) || "",
+    duration: (initial && initial.duration) !== undefined ? initial.duration : "",
+    predecessors: new Set((initial && initial.predecessors) || []),
+    predOpen: false,
+    predFilter: ""
+  };
+  rows.push(row);
+  renderRows();
+}
+
+function removeRow(id) {
+  const idx = rows.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  rows.splice(idx, 1);
+  for (const r of rows) r.predecessors.delete(id);
+  renderRows();
+}
+
+function renderRows() {
+  const tbody = document.getElementById("rowsBody");
+  tbody.innerHTML = "";
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+
+    // Name cell
+    const nameTd = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.className = "name-input";
+    nameInput.type = "text";
+    nameInput.placeholder = "e.g. A";
+    nameInput.value = row.name;
+    nameInput.addEventListener("input", () => {
+      row.name = nameInput.value;
+      renderRows(); // predecessor labels/options may need refreshing
+      // restore focus/cursor after re-render
+      const el = tbody.querySelector(`tr[data-row-id="${row.id}"] .name-input`);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    });
+    nameTd.appendChild(nameInput);
+    tr.appendChild(nameTd);
+
+    // Duration cell
+    const durTd = document.createElement("td");
+    const durInput = document.createElement("input");
+    durInput.className = "dur-input";
+    durInput.type = "number";
+    durInput.min = "0";
+    durInput.step = "any";
+    durInput.placeholder = "1";
+    durInput.value = row.duration;
+    durInput.addEventListener("input", () => { row.duration = durInput.value; });
+    durTd.appendChild(durInput);
+    tr.appendChild(durTd);
+
+    // Predecessors cell
+    const predTd = document.createElement("td");
+    const dropdown = document.createElement("div");
+    dropdown.className = "pred-dropdown";
+    dropdown.addEventListener("click", (e) => e.stopPropagation());
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.id = `pred-trigger-${row.id}`;
+    trigger.className = "pred-trigger";
+    const summary = predSummary(row);
+    trigger.textContent = summary.text + " \u25be";
+    if (summary.empty) trigger.classList.add("pred-trigger-empty");
+    trigger.addEventListener("click", () => {
+      const willOpen = !row.predOpen;
+      for (const r of rows) r.predOpen = false;
+      row.predOpen = willOpen;
+      if (willOpen) row.predFilter = "";
+      renderRows();
+    });
+    dropdown.appendChild(trigger);
+
+    if (row.predOpen) {
+      const panel = document.createElement("div");
+      panel.className = "pred-panel";
+
+      const optionsContainer = document.createElement("div");
+      optionsContainer.className = "pred-options";
+
+      const otherCount = rows.filter(r => r.id !== row.id && r.name.trim().length > 0).length;
+      if (otherCount > 5) {
+        const search = document.createElement("input");
+        search.type = "text";
+        search.className = "pred-search";
+        search.placeholder = "Filter activities\u2026";
+        search.value = row.predFilter;
+        search.addEventListener("input", () => {
+          row.predFilter = search.value;
+          renderPredOptions(row, optionsContainer);
+        });
+        panel.appendChild(search);
+        setTimeout(() => search.focus(), 0);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "pred-actions";
+      const selectAllBtn = document.createElement("button");
+      selectAllBtn.type = "button";
+      selectAllBtn.textContent = "Select all";
+      selectAllBtn.addEventListener("click", () => {
+        const filter = row.predFilter.trim().toLowerCase();
+        for (const r of rows) {
+          if (r.id !== row.id && r.name.trim() && r.name.trim().toLowerCase().includes(filter)) {
+            row.predecessors.add(r.id);
+          }
+        }
+        renderPredOptions(row, optionsContainer);
+        updateTriggerText(row);
+      });
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.textContent = "Clear";
+      clearBtn.addEventListener("click", () => {
+        row.predecessors.clear();
+        renderPredOptions(row, optionsContainer);
+        updateTriggerText(row);
+      });
+      actions.appendChild(selectAllBtn);
+      actions.appendChild(clearBtn);
+      panel.appendChild(actions);
+
+      panel.appendChild(optionsContainer);
+      renderPredOptions(row, optionsContainer);
+
+      const doneBtn = document.createElement("button");
+      doneBtn.type = "button";
+      doneBtn.className = "pred-done";
+      doneBtn.textContent = "Done";
+      doneBtn.addEventListener("click", () => {
+        row.predOpen = false;
+        renderRows();
+      });
+      panel.appendChild(doneBtn);
+
+      dropdown.appendChild(panel);
+    }
+
+    predTd.appendChild(dropdown);
+    tr.appendChild(predTd);
+
+    // Remove cell
+    const removeTd = document.createElement("td");
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "remove-btn";
+    removeBtn.textContent = "\u00d7";
+    removeBtn.title = "Remove activity";
+    removeBtn.addEventListener("click", () => removeRow(row.id));
+    removeTd.appendChild(removeBtn);
+    tr.appendChild(removeTd);
+
+    tr.setAttribute("data-row-id", row.id);
+    tbody.appendChild(tr);
+  }
+}
+
+function predSummary(row) {
+  const selectedNames = Array.from(row.predecessors)
+    .map(id => { const r = rows.find(x => x.id === id); return r ? r.name.trim() : null; })
+    .filter(Boolean);
+  if (selectedNames.length === 0) return { text: "No predecessors", empty: true };
+  if (selectedNames.length <= 2) return { text: selectedNames.join(", "), empty: false };
+  return { text: `${selectedNames.slice(0, 2).join(", ")} +${selectedNames.length - 2} more`, empty: false };
+}
+
+function updateTriggerText(row) {
+  const btn = document.getElementById(`pred-trigger-${row.id}`);
+  if (!btn) return;
+  const summary = predSummary(row);
+  btn.textContent = summary.text + " \u25be";
+  btn.classList.toggle("pred-trigger-empty", summary.empty);
+}
+
+function renderPredOptions(row, container) {
+  container.innerHTML = "";
+  const filter = row.predFilter.trim().toLowerCase();
+  const otherRows = rows.filter(r => r.id !== row.id && r.name.trim().length > 0);
+  if (otherRows.length === 0) {
+    const p = document.createElement("div");
+    p.className = "pred-empty";
+    p.textContent = "No other activities yet";
+    container.appendChild(p);
+    return;
+  }
+  const filtered = otherRows.filter(r => r.name.trim().toLowerCase().includes(filter));
+  if (filtered.length === 0) {
+    const p = document.createElement("div");
+    p.className = "pred-empty";
+    p.textContent = "No matches";
+    container.appendChild(p);
+    return;
+  }
+  for (const other of filtered) {
+    const label = document.createElement("label");
+    label.className = "pred-option";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = row.predecessors.has(other.id);
+    cb.addEventListener("change", () => {
+      if (cb.checked) row.predecessors.add(other.id);
+      else row.predecessors.delete(other.id);
+      updateTriggerText(row);
+    });
+    const span = document.createElement("span");
+    span.textContent = other.name.trim();
+    label.appendChild(cb);
+    label.appendChild(span);
+    container.appendChild(label);
+  }
+}
+
+// Close any open predecessor dropdown when clicking elsewhere
+document.addEventListener("click", () => {
+  let changed = false;
+  for (const r of rows) {
+    if (r.predOpen) { r.predOpen = false; changed = true; }
+  }
+  if (changed) renderRows();
+});
+
+function collectActivitiesFromRows() {
+  const activities = [];
+  const seenNames = new Set();
+  for (const row of rows) {
+    const name = row.name.trim();
+    if (!name) throw new Error("Every activity needs a name.");
+    if (seenNames.has(name)) throw new Error(`Duplicate activity name: "${name}"`);
+    seenNames.add(name);
+    const durText = String(row.duration).trim();
+    const duration = durText === "" ? 1 : parseFloat(durText);
+    if (isNaN(duration) || duration < 0) throw new Error(`Invalid duration for activity "${name}".`);
+    const predecessors = Array.from(row.predecessors).map(id => {
+      const r = rows.find(rr => rr.id === id);
+      return r ? r.name.trim() : null;
+    }).filter(Boolean);
+    activities.push(new Activity(name, duration, predecessors));
+  }
+  return activities;
+}
+
+// ---------- Topological Sort ----------
+
+function topologicalSort(activities) {
+  const activityMap = {};
+  for (const a of activities) activityMap[a.name] = a;
+
+  const indegree = {};
+  const successors = {};
+  for (const a of activities) {
+    indegree[a.name] = a.predecessors.length;
+    successors[a.name] = [];
+  }
+
+  for (const a of activities) {
+    for (const pred of a.predecessors) {
+      if (!(pred in successors)) {
+        throw new Error(`Unknown predecessor "${pred}" referenced by "${a.name}"`);
+      }
+      successors[pred].push(a.name);
+    }
+  }
+
+  const queue = [];
+  for (const name in indegree) {
+    if (indegree[name] === 0) queue.push(activityMap[name]);
+  }
+
+  const order = [];
+  while (queue.length > 0) {
+    const act = queue.shift();
+    order.push(act);
+    for (const nxt of successors[act.name]) {
+      indegree[nxt] -= 1;
+      if (indegree[nxt] === 0) queue.push(activityMap[nxt]);
+    }
+  }
+
+  if (order.length !== activities.length) {
+    throw new Error("Cycle detected.");
+  }
+
+  return order;
+}
+
+// ---------- Network building ----------
+
+function buildNetwork(activities) {
+  const ordered = topologicalSort(activities);
+
+  const start = new Event(0);
+  const events = [start];
+  const arrows = [];
+  let nextEventId = 1;
+
+  function newEvent() {
+    const ev = new Event(nextEventId++);
+    events.push(ev);
+    return ev;
+  }
+
+  function connectArrow(startEvent, endEvent, activity) {
+    const arrow = new Arrow(startEvent, endEvent, activity);
+    arrows.push(arrow);
+    startEvent.outgoing.push(arrow);
+    endEvent.incoming.push(arrow);
+    return arrow;
+  }
+
+  for (const act of ordered) {
+    if (act.predecessors.length === 0) {
+      const startEvent = start;
+      const endEvent = newEvent();
+      connectArrow(startEvent, endEvent, act);
+    } else {
+      let endEvent = newEvent();
+      for (const prevAct of act.predecessors) {
+        let startEvent = null;
+        for (const arr of arrows) {
+          if (arr.activity && arr.activity.name === prevAct) {
+            startEvent = arr.end;
+            break;
+          }
+        }
+        connectArrow(startEvent, endEvent, null);
+      }
+      const startEvent = endEvent;
+      endEvent = newEvent();
+      connectArrow(startEvent, endEvent, act);
+    }
+  }
+
+  // Connect to end
+  const end = new Event(-1);
+  const startsArray = arrows.map(a => a.start.id);
+  const ends = [];
+  for (const a of arrows) {
+    if (!startsArray.includes(a.end.id)) ends.push(a.end);
+  }
+  for (const e of ends) {
+    connectArrow(e, end, null);
+  }
+
+  // ---------- Dummy collapse ----------
+
+  function preceededBy(event) {
+    const result = new Set();
+    for (const arr of event.incoming) {
+      if (arr.activity) {
+        result.add(arr.activity.name);
+      } else {
+        for (const inner of arr.start.incoming) {
+          if (inner.activity) result.add(inner.activity.name);
+        }
+      }
+    }
+    return result;
+  }
+
+  function followedBy(event) {
+    const result = new Set();
+    for (const arr of event.outgoing) {
+      if (arr.activity) {
+        result.add(arr.activity.name);
+      } else {
+        for (const inner of arr.end.outgoing) {
+          if (inner.activity) result.add(inner.activity.name);
+        }
+      }
+    }
+    return result;
+  }
+
+  function setsEqual(a, b) {
+    if (a.size !== b.size) return false;
+    for (const x of a) if (!b.has(x)) return false;
+    return true;
+  }
+
+  function removeArrow(arr, list) {
+    const idx = list.indexOf(arr);
+    if (idx !== -1) list.splice(idx, 1);
+  }
+
+  function allEvents() {
+    const set = new Set();
+    for (const a of arrows) {
+      set.add(a.start);
+      set.add(a.end);
+    }
+    return Array.from(set);
+  }
+
+  function hasParallelEdge(keep, remove) {
+
+      // Outgoing
+      for (const a1 of keep.outgoing) {
+          if (a1.end === remove) continue;
+
+          for (const a2 of remove.outgoing) {
+              if (a2.end === keep) continue;
+              if (a1.end !== a2.end) continue;
+
+              // Ignore duplicate dummy arrows
+              if (!a1.activity && !a2.activity) continue;
+
+              return true;
+          }
+      }
+
+      // Incoming
+      for (const a1 of keep.incoming) {
+          if (a1.start === remove) continue;
+
+          for (const a2 of remove.incoming) {
+              if (a2.start === keep) continue;
+              if (a1.start !== a2.start) continue;
+
+              // Ignore duplicate dummy arrows
+              if (!a1.activity && !a2.activity) continue;
+
+              return true;
+          }
+      }
+
+      return false;
+  }
+
+  // Merge `remove` into `keep`: every arrow touching `remove` is rewired to
+  // touch `keep` instead. Any arrow that would become a self-loop as a result
+  // (i.e. a dummy directly connecting keep and remove) is dropped entirely.
+  function mergeEvents(keep, remove) {
+    if (keep === remove) return;
+    if (hasParallelEdge(keep, remove))
+      return;
+
+    for (const arr of remove.outgoing.slice()) {
+      if (arr.end === keep) {
+        removeArrow(arr, arrows);
+        removeArrow(arr, keep.incoming);
+        continue;
+      }
+      arr.start = keep;
+      keep.outgoing.push(arr);
+    }
+
+    for (const arr of remove.incoming.slice()) {
+      if (arr.start === keep) {
+        removeArrow(arr, arrows);
+        removeArrow(arr, keep.outgoing);
+        continue;
+      }
+      arr.end = keep;
+      keep.incoming.push(arr);
+    }
+
+    remove.outgoing = [];
+    remove.incoming = [];
+  }
+
+  // Compare every pair of events (not just ones already joined by a dummy):
+  // if two events share the same set of ultimate predecessors, or the same
+  // set of ultimate successors, they represent the same point in the
+  // schedule and can be collapsed into one, eliminating whichever dummy
+  // arrows were only there to connect them.
+  function tryMergeByFn(fn) {
+    const events = allEvents();
+    for (let i = 0; i < events.length; i++) {
+      for (let j = i + 1; j < events.length; j++) {
+        const e1 = events[i];
+        const e2 = events[j];
+        const s1 = fn(e1);
+        const s2 = fn(e2);
+        if (setsEqual(s1, s2)) {
+            if (mergeEvents(e1, e2))
+                return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function dedupeDummyArrows() {
+    const seen = new Set();
+    const toDelete = [];
+    for (const a of arrows) {
+      if (!a.activity) {
+        const key = a.start.id + "->" + a.end.id;
+        if (seen.has(key)) toDelete.push(a);
+        else seen.add(key);
+      }
+    }
+    for (const a of toDelete) {
+      removeArrow(a, arrows);
+      removeArrow(a, a.start.outgoing);
+      removeArrow(a, a.end.incoming);
+    }
+  }
+
+  // Repeat both collapse strategies until a full pass makes no more changes
+  let changed = true;
+  while (changed) {
+    changed = false;
+    if (tryMergeByFn(preceededBy)) changed = true;
+    if (tryMergeByFn(followedBy)) changed = true;
+  }
+
+  dedupeDummyArrows();
+
+  return arrows;
+}
+
+// ---------- Node renumbering ----------
+
+function renumberNodes(arrows) {
+  const nodesSet = new Set();
+  for (const a of arrows) {
+    nodesSet.add(a.start.id);
+    nodesSet.add(a.end.id);
+  }
+
+  const outEdges = new Map();
+  const inDegree = new Map();
+  for (const n of nodesSet) {
+    outEdges.set(n, []);
+    inDegree.set(n, 0);
+  }
+  for (const a of arrows) {
+    outEdges.get(a.start.id).push(a.end.id);
+    inDegree.set(a.end.id, inDegree.get(a.end.id) + 1);
+  }
+
+  const queue = [];
+  for (const n of nodesSet) {
+    if (inDegree.get(n) === 0) queue.push(n);
+  }
+  queue.sort((a, b) => a - b);
+
+  const order = [];
+  while (queue.length > 0) {
+    queue.sort((a, b) => a - b); // smallest original id first, for a stable/predictable order
+    const n = queue.shift();
+    order.push(n);
+    for (const nxt of outEdges.get(n)) {
+      inDegree.set(nxt, inDegree.get(nxt) - 1);
+      if (inDegree.get(nxt) === 0) queue.push(nxt);
+    }
+  }
+
+  const mapping = new Map();
+  order.forEach((id, idx) => mapping.set(id, idx + 1));
+  return mapping;
+}
+
+// ---------- CPM calculations ----------
+
+function computeEventTimes(arrows, mapping) {
+  const nodeIds = Array.from(new Set(mapping.values()));
+  const maxId = Math.max(...nodeIds);
+
+  const outgoing = new Map();
+  const incoming = new Map();
+  for (const id of nodeIds) {
+    outgoing.set(id, []);
+    incoming.set(id, []);
+  }
+  for (const a of arrows) {
+    const s = mapping.get(a.start.id);
+    const e = mapping.get(a.end.id);
+    const dur = a.activity ? a.activity.duration : 0;
+    outgoing.get(s).push({ to: e, duration: dur });
+    incoming.get(e).push({ from: s, duration: dur });
+  }
+
+  // Forward pass: earliest event time, processing in increasing node-id order
+  // (valid because renumberNodes assigns ids in topological order)
+  const E = new Map();
+  for (let id = 1; id <= maxId; id++) {
+    const preds = incoming.get(id) || [];
+    if (preds.length === 0) {
+      E.set(id, 0);
+    } else {
+      let maxE = 0;
+      for (const p of preds) maxE = Math.max(maxE, E.get(p.from) + p.duration);
+      E.set(id, maxE);
+    }
+  }
+
+  const projectDuration = E.get(maxId);
+
+  // Backward pass: latest event time, processing in decreasing node-id order
+  const L = new Map();
+  for (let id = maxId; id >= 1; id--) {
+    const succs = outgoing.get(id) || [];
+    if (succs.length === 0) {
+      L.set(id, projectDuration);
+    } else {
+      let minL = Infinity;
+      for (const s of succs) minL = Math.min(minL, L.get(s.to) - s.duration);
+      L.set(id, minL);
+    }
+  }
+
+  return { E, L, projectDuration };
+}
+
+function computeCpmRows(activities, arrows, mapping, E, L) {
+  const EPS = 1e-9;
+  const rows = [];
+  for (const act of activities) {
+    const arr = arrows.find(a => a.activity && a.activity.name === act.name);
+    if (!arr) continue;
+    const i = mapping.get(arr.start.id);
+    const j = mapping.get(arr.end.id);
+    const d = act.duration;
+
+    const est = E.get(i);
+    const eft = est + d;
+    const lft = L.get(j);
+    const lst = lft - d;
+    const tf = lft - eft;
+    const ff = E.get(j) - eft;
+    const if1 = Math.max(0, E.get(j) - L.get(i) - d);
+    const if2 = tf - ff;
+    const isCritical = Math.abs(tf) < EPS;
+
+    rows.push({
+      name: act.name, duration: d,
+      est, eft, lst, lft, tf, ff, if1, if2,
+      remark: isCritical ? "Cp" : "",
+      critical: isCritical
+    });
+  }
+  return rows;
+}
+
+function fmtNum(n) {
+  const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
+  return Object.is(rounded, -0) ? "0" : rounded.toString();
+}
+
+function renderCpmTable(rows) {
+  const wrap = document.getElementById("cpmTableWrap");
+  if (rows.length === 0) {
+    wrap.innerHTML = "";
+    return;
+  }
+  const cols = ["Activity", "Duration", "EST", "EFT", "LST", "LFT", "TF", "FF", "IF1", "IF2", "Remark"];
+  let html = '<table id="cpmTable"><thead><tr>';
+  for (const c of cols) html += `<th>${c}</th>`;
+  html += "</tr></thead><tbody>";
+  for (const r of rows) {
+    html += `<tr class="${r.critical ? "cp-row" : ""}">`;
+    html += `<td>${r.name}</td>`;
+    html += `<td>${fmtNum(r.duration)}</td>`;
+    html += `<td>${fmtNum(r.est)}</td>`;
+    html += `<td>${fmtNum(r.eft)}</td>`;
+    html += `<td>${fmtNum(r.lst)}</td>`;
+    html += `<td>${fmtNum(r.lft)}</td>`;
+    html += `<td>${fmtNum(r.tf)}</td>`;
+    html += `<td>${fmtNum(r.ff)}</td>`;
+    html += `<td>${fmtNum(r.if1)}</td>`;
+    html += `<td>${fmtNum(r.if2)}</td>`;
+    html += `<td class="remark-cell">${r.remark}</td>`;
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  wrap.innerHTML = html;
+}
+function renderCriticalPath(rows) {
+  const wrap = document.getElementById("cpmTableWrap");
+
+  const cp = rows
+    .filter(r => r.critical)
+    .sort((a, b) => a.est - b.est);
+
+  if (cp.length === 0) return;
+
+  const path = cp.map(r => r.name).join(" → ");
+  const duration = cp.reduce((sum, r) => sum + r.duration, 0);
+
+  wrap.innerHTML += `
+    <div style="margin-top:20px;padding:12px;border:1px solid #ccc;border-radius:6px;background:#f8f8f8;">
+      <div><strong>Critical Path:</strong> ${path} (activities on critical path, not proper, needs fix)</div>
+      <div style="margin-top:6px;"><strong>Project Duration:</strong> ${fmtNum(duration)}</div>
+    </div>
+  `;
+}
+// ---------- DOT export ----------
+
+function arrowsToDot(arrows, criticalActivities = new Set()) {
+  const dot = [];
+  dot.push("digraph AOA {");
+  dot.push("rankdir=LR;");
+  dot.push('node [shape=circle, fontsize=12, width=0.4, fixedsize=true];');
+  dot.push('edge [fontsize=11];');
+
+  const mapping = renumberNodes(arrows);
+
+  const sortedNodes = Array.from(mapping.values()).sort((a, b) => a - b);
+  for (const n of sortedNodes) {
+    dot.push(`${n} [label="${n}"];`);
+  }
+
+  for (const a of arrows) {
+    const startId = mapping.get(a.start.id);
+    const endId = mapping.get(a.end.id);
+    if (a.activity) {
+        const label = `${a.activity.name} (${a.activity.duration})`;
+
+        if (criticalActivities.has(a.activity.name)) {
+            dot.push(
+                `${startId} -> ${endId} ` +
+                `[label="${label}", color=red, fontcolor=red, penwidth=4];`
+            );
+        } else {
+            dot.push(
+                `${startId} -> ${endId} ` +
+                `[label="${label}", color=black, fontcolor=black, penwidth=2];`
+            );
+        }
+    } else {
+        dot.push(
+            `${startId} -> ${endId} ` +
+            `[style=dashed, color=gray, fontcolor=gray, label=""];`
+        );
+    }
+  }
+
+  dot.push("}");
+  return dot.join("\n");
+}
+
+// ---------- Zoom / pan ----------
+
+function setupZoomPan(container, target, onScaleChange) {
+  const minScale = 0.2;
+  const maxScale = 8;
+  let scale = 1;
+  let translateX = 0;
+  let translateY = 0;
+
+  const pointers = new Map();
+  let dragStart = null;
+  let lastPinchDist = null;
+
+  function apply() {
+    target.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    if (onScaleChange) onScaleChange(scale);
+  }
+
+  function containerCenter() {
+    const rect = container.getBoundingClientRect();
+    return { x: rect.width / 2, y: rect.height / 2 };
+  }
+
+  function zoomAt(pointInContainer, factor) {
+    const newScale = Math.min(maxScale, Math.max(minScale, scale * factor));
+    const actualFactor = newScale / scale;
+    translateX = pointInContainer.x - actualFactor * (pointInContainer.x - translateX);
+    translateY = pointInContainer.y - actualFactor * (pointInContainer.y - translateY);
+    scale = newScale;
+    apply();
+  }
+
+  function toLocal(clientX, clientY) {
+    const rect = container.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+
+  container.addEventListener("pointerdown", (e) => {
+    container.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      dragStart = { x: e.clientX, y: e.clientY, translateX, translateY };
+      container.classList.add("grabbing");
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      lastPinchDist = dist(pts[0], pts[1]);
+    }
+  });
+
+  container.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.size === 1 && dragStart) {
+      translateX = dragStart.translateX + (e.clientX - dragStart.x);
+      translateY = dragStart.translateY + (e.clientY - dragStart.y);
+      apply();
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      const newDist = dist(pts[0], pts[1]);
+      const midClient = mid(pts[0], pts[1]);
+      if (lastPinchDist) {
+        zoomAt(toLocal(midClient.x, midClient.y), newDist / lastPinchDist);
+      }
+      lastPinchDist = newDist;
+    }
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) lastPinchDist = null;
+    if (pointers.size === 0) {
+      dragStart = null;
+      container.classList.remove("grabbing");
+    }
+  }
+  container.addEventListener("pointerup", endPointer);
+  container.addEventListener("pointercancel", endPointer);
+  container.addEventListener("pointerleave", endPointer);
+
+  container.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zoomAt(toLocal(e.clientX, e.clientY), factor);
+  }, { passive: false });
+
+  apply();
+
+  return {
+    zoomIn: () => zoomAt(containerCenter(), 1.25),
+    zoomOut: () => zoomAt(containerCenter(), 1 / 1.25),
+    reset: () => { scale = 1; translateX = 0; translateY = 0; apply(); }
+  };
+}
+
+let currentZoomControl = null;
+
+document.getElementById("zoomInBtn").addEventListener("click", () => currentZoomControl && currentZoomControl.zoomIn());
+document.getElementById("zoomOutBtn").addEventListener("click", () => currentZoomControl && currentZoomControl.zoomOut());
+document.getElementById("zoomResetBtn").addEventListener("click", () => currentZoomControl && currentZoomControl.reset());
+
+// ---------- Wiring ----------
+
+document.getElementById("addRowBtn").addEventListener("click", () => addRow());
+
+// Seed with a few empty rows to start
+addRow();
+addRow();
+addRow();
+
+document.getElementById("runBtn").addEventListener("click", () => {
+  const graphDiv = document.getElementById("graph");
+  const cpmWrap = document.getElementById("cpmTableWrap");
+  try {
+    const activities = collectActivitiesFromRows();
+    if (activities.length === 0) {
+      graphDiv.innerHTML = '<span class="error">No activities entered.</span>';
+      cpmWrap.innerHTML = "";
+      return;
+    }
+    const arrows = buildNetwork(activities);
+    const mapping = renumberNodes(arrows);
+
+    const { E, L } = computeEventTimes(arrows, mapping);
+    const cpmRows = computeCpmRows(activities, arrows, mapping, E, L);
+    renderCpmTable(cpmRows);
+    renderCriticalPath(cpmRows);
+    const criticalActivities = new Set(
+        cpmRows.filter(r => r.critical).map(r => r.name)
+    );
+    const dotSource = arrowsToDot(arrows, criticalActivities);
+
+    graphDiv.innerHTML = "";
+    new Viz()
+      .renderSVGElement(dotSource)
+      .then(function (svg) {
+        graphDiv.appendChild(svg);
+        const control = setupZoomPan(graphDiv, svg, (s) => {
+          document.getElementById("zoomPct").textContent = Math.round(s * 100) + "%";
+        });
+        currentZoomControl = control;
+      })
+      .catch(function (err) {
+        graphDiv.innerHTML = '<pre class="error">' + err + "</pre>";
+      });
+  } catch (err) {
+    graphDiv.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
+    cpmWrap.innerHTML = "";
+  }
+});
+</script>
+
+</body>
+</html>
